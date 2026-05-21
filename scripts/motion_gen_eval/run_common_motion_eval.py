@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""Run motion-correctness evaluation across all generated common videos.
+"""Run motion-correctness evaluation across all generated videos.
 
-Iterates ``outputs/video_generation/generated_videos/common/<model>/<dataset>``
-where ``<model> in {sora2, veo3.1, seedance2}`` and ``<dataset> in
-{single_components, full_layout}``, and produces:
+Iterates ``<data-root>/generated_videos/<model>/<dataset>/`` and the GT
+renders in ``<data-root>/{all_full_layout,all_single_components}/renders/``,
+and produces:
 
-* per-video tracker JSONs in ``results_common/<model>/<dataset>/tracks/``
+* per-video tracker JSONs in ``<output-dir>/<model>/<dataset>/tracks/``
 * per-video motion-metric JSONs (one per evaluated component) in
-  ``results_common/<model>/<dataset>/metrics/``
+  ``<output-dir>/<model>/<dataset>/metrics/``
 * a flat CSV ``<dataset>_results.csv``
 * an aggregate ``<dataset>_summary.json``
 
 For ``single_components`` we use the no-YOLO :class:`ContourTracker` (the
-videos are rendered on a known white background, single object). For
+videos are rendered on a known background, single object). For
 ``full_layout`` we use the YOLO-OBB checkpoint at
 ``ckpt/yolo11xOBB-obb80_best_*.pt`` and run per-frame YOLO ``predict``
 with spatial polygon-IoU matching against the layout components listed
-in ``data/all_full_layout/manifest.jsonl``. There is no temporal
+in ``<data-root>/all_full_layout/manifest.jsonl``. There is no temporal
 multi-object tracker (ByteTrack/BoT-SORT are no longer used).
 
 Usage::
 
-    # Everything (both models, both datasets, with full reuse if already done)
-    python run_common_motion_eval.py
+    # Everything (all discovered models + GT, both datasets)
+    python run_common_motion_eval.py --data-root /path/to/motion_gen_eval
 
     # Only the Sora 2 single-component videos
     python run_common_motion_eval.py --models sora2 --datasets single_components
@@ -69,18 +69,45 @@ def _dump_json(obj: Any, path: Path) -> None:
     path.write_text(json.dumps(_json_safe(obj), indent=2, default=str,
                                allow_nan=False))
 
-DATA_ROOT = REPO_ROOT / "data" / "motion_gen_eval"
-DEFAULT_VIDEOS_ROOT = DATA_ROOT / "generated_videos" / "common"
+# All eval-data paths derive from DATA_ROOT and are re-bound in `main()`
+# whenever the user passes --data-root. The defaults match the original
+# in-repo layout (`<repo>/data/motion_gen_eval/...`), but the data is
+# typically held outside the repo and pointed at via --data-root.
+DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "motion_gen_eval"
+DATA_ROOT = DEFAULT_DATA_ROOT
+DEFAULT_VIDEOS_ROOT = DATA_ROOT / "generated_videos"
 VIDEOS_ROOT = DEFAULT_VIDEOS_ROOT  # overridden by --videos-root at CLI parse time
 SINGLE_LAYOUTS = DATA_ROOT / "all_single_components" / "layouts"
 SINGLE_MANIFEST = DATA_ROOT / "all_single_components" / "manifest.jsonl"
+SINGLE_RENDERS = DATA_ROOT / "all_single_components" / "renders"
 FULL_LAYOUTS = DATA_ROOT / "all_full_layout" / "layouts"
 FULL_MANIFEST = DATA_ROOT / "all_full_layout" / "manifest.jsonl"
+FULL_RENDERS = DATA_ROOT / "all_full_layout" / "renders"
 DEFAULT_YOLO_CKPT = REPO_ROOT / "ckpt" / "yolo11xOBB-obb80_best.pt"
 DEFAULT_RESULTS_DIR = REPO_ROOT / "results" / "motion_gen_eval" / "common"
 
-MODELS = ("sora2", "veo3.1", "seedance2", "gt")
+MODELS = ("sora2", "veo3.1", "gt")
 DATASETS = ("single_components", "full_layout")
+
+
+def _apply_data_root(data_root: Path) -> None:
+    """Rebind all DATA_ROOT-derived module globals.
+
+    Called from ``main()`` after argument parsing so that --data-root,
+    --videos-root, etc. are reflected in the discovery helpers below.
+    """
+    global DATA_ROOT, DEFAULT_VIDEOS_ROOT, VIDEOS_ROOT
+    global SINGLE_LAYOUTS, SINGLE_MANIFEST, SINGLE_RENDERS
+    global FULL_LAYOUTS, FULL_MANIFEST, FULL_RENDERS
+    DATA_ROOT = data_root
+    DEFAULT_VIDEOS_ROOT = DATA_ROOT / "generated_videos"
+    VIDEOS_ROOT = DEFAULT_VIDEOS_ROOT
+    SINGLE_LAYOUTS = DATA_ROOT / "all_single_components" / "layouts"
+    SINGLE_MANIFEST = DATA_ROOT / "all_single_components" / "manifest.jsonl"
+    SINGLE_RENDERS = DATA_ROOT / "all_single_components" / "renders"
+    FULL_LAYOUTS = DATA_ROOT / "all_full_layout" / "layouts"
+    FULL_MANIFEST = DATA_ROOT / "all_full_layout" / "manifest.jsonl"
+    FULL_RENDERS = DATA_ROOT / "all_full_layout" / "renders"
 
 # Only these layout types are detectable by the trained YOLO checkpoint
 # (which has classes {0: text, 1: image}). GROUP boxes are typically
@@ -124,13 +151,17 @@ def _video_sample_id(path: Path) -> str:
     return path.stem
 
 
-def _resolve_gt_video(entry: Dict[str, Any], gt_videos_root: Optional[Path]) -> Optional[Path]:
+def _resolve_gt_video(entry: Dict[str, Any], gt_videos_root: Optional[Path],
+                      default_renders_dir: Optional[Path] = None) -> Optional[Path]:
     """Resolve the ground-truth render video for a manifest entry.
 
     Checks, in order:
     1. ``gt_videos_root / <sample_id>.mp4`` if gt_videos_root is provided
-    2. The ``render_path`` field relative to ``REPO_ROOT``
-    3. The ``render_path`` field as-is (absolute)
+    2. ``default_renders_dir / <sample_id>.mp4`` (typically
+       ``<data_root>/<dataset>/renders/``)
+    3. The ``render_path`` field relative to ``REPO_ROOT``
+    4. The ``render_path`` field relative to ``DATA_ROOT``
+    5. The ``render_path`` field as-is (absolute)
     """
     sid = entry.get("sample_id", "")
     render_rel = entry.get("render_path", "")
@@ -140,10 +171,16 @@ def _resolve_gt_video(entry: Dict[str, Any], gt_videos_root: Optional[Path]) -> 
         if candidate.exists():
             return candidate
 
-    if render_rel:
-        candidate = REPO_ROOT / render_rel
+    if default_renders_dir:
+        candidate = default_renders_dir / f"{sid}.mp4"
         if candidate.exists():
             return candidate
+
+    if render_rel:
+        for base in (REPO_ROOT, DATA_ROOT):
+            candidate = base / render_rel
+            if candidate.exists():
+                return candidate
         candidate = Path(render_rel)
         if candidate.exists():
             return candidate
@@ -163,7 +200,8 @@ def discover_single_jobs(model: str, max_per_dataset: int = 0,
                 print(f"[discover] gt/single_components: missing layout for {sid}",
                       file=sys.stderr)
                 continue
-            video = _resolve_gt_video(entry, gt_videos_root)
+            video = _resolve_gt_video(entry, gt_videos_root,
+                                      default_renders_dir=SINGLE_RENDERS)
             if video is None:
                 print(f"[discover] gt/single_components: missing render for {sid}",
                       file=sys.stderr)
@@ -197,7 +235,8 @@ def discover_single_jobs(model: str, max_per_dataset: int = 0,
             continue
         entry = manifest.get(sid, {})
         component_id = entry.get("source_component_id")
-        component_family = (entry.get("component_family") or "").upper()
+        component_family = (entry.get("component_family") or
+                            entry.get("component_type") or "").upper()
         jobs.append({
             "model": model,
             "dataset": "single_components",
@@ -227,7 +266,8 @@ def discover_full_jobs(model: str, max_per_dataset: int = 0,
                 print(f"[discover] gt/full_layout: missing layout for {sid}",
                       file=sys.stderr)
                 continue
-            video = _resolve_gt_video(entry, gt_videos_root)
+            video = _resolve_gt_video(entry, gt_videos_root,
+                                      default_renders_dir=FULL_RENDERS)
             if video is None:
                 print(f"[discover] gt/full_layout: missing render for {sid}",
                       file=sys.stderr)
@@ -738,10 +778,15 @@ def main(argv: Optional[List[str]] = None) -> None:
     p.add_argument("--match-iou-thresh", type=float, default=0.03,
                    help=("Min polygon IoU to match a YOLO detection to a "
                          "layout component (full_layout, per-frame mode)"))
-    p.add_argument("--videos-root", type=Path, default=DEFAULT_VIDEOS_ROOT,
-                   help=("Root directory containing <model>/<dataset>/*.mp4 "
-                         "(default: .../generated_videos/common). "
-                         "Use .../common_paired for paired-only evaluation."))
+    p.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT,
+                   help=("Root directory of the eval dataset. Expected layout: "
+                         "<data-root>/{all_full_layout,all_single_components}/"
+                         "{layouts/,renders/,manifest.jsonl} and "
+                         "<data-root>/generated_videos/<model>/<dataset>/. "
+                         f"Default: {DEFAULT_DATA_ROOT}"))
+    p.add_argument("--videos-root", type=Path, default=None,
+                   help=("Root directory containing <model>/<dataset>/*.mp4. "
+                         "Defaults to <data-root>/generated_videos."))
     p.add_argument("--output-dir", type=Path, default=DEFAULT_RESULTS_DIR,
                    help="Where to write tracks / metrics / summaries")
     p.add_argument("--no-skip-tracking", action="store_true",
@@ -755,13 +800,19 @@ def main(argv: Optional[List[str]] = None) -> None:
     p.add_argument("--gt-videos-root", type=Path, default=None,
                    help=("Root directory containing GT render videos. "
                          "When --models includes 'gt', videos are resolved "
-                         "from this directory (as <sample_id>.mp4) or from "
-                         "the manifest render_path field."))
+                         "from this directory (as <sample_id>.mp4), then "
+                         "from <data-root>/<dataset>/renders/, and finally "
+                         "from the manifest render_path field."))
     p.add_argument("--max-per-dataset", type=int, default=0,
                    help="If >0, limit each (model,dataset) to N videos "
                         "(useful for smoke-testing)")
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args(argv)
+
+    _apply_data_root(args.data_root.resolve())
+    print(f"[run] data root  : {DATA_ROOT}")
+    if args.videos_root is None:
+        args.videos_root = DEFAULT_VIDEOS_ROOT
 
     models = list(MODELS) if "all" in args.models else list(dict.fromkeys(args.models))
     datasets = list(DATASETS) if "all" in args.datasets else list(dict.fromkeys(args.datasets))
