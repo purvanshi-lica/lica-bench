@@ -73,6 +73,14 @@ all-providers = [
 dev = [
     "ruff",
 ]
+motion-gen-eval = [
+    "numpy>=1.24",
+    "opencv-python>=4.8",
+    "ultralytics>=8.2",
+    "shapely>=2.0",
+    "scipy>=1.11",
+    "requests>=2.28",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -90,4 +98,4 @@ select = ["E", "F", "W", "I"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["design_benchmarks"]
+known-first-party = ["design_benchmarks", "motion_gen_eval"]
