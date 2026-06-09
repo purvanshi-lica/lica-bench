@@ -250,6 +250,16 @@ See **[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)** for:
 - How to create a new domain module
 - Where benchmark inputs live in the Lica release and the PR checklist
 
+## Motion-generation evaluation
+
+For tracker + motion-correctness evaluation of generated animation videos
+(motion type, direction, animation duration, component duration), see
+[`scripts/motion_gen_eval/README.md`](scripts/motion_gen_eval/README.md).
+The library lives in [`src/motion_gen_eval/`](src/motion_gen_eval/) and the
+runners in [`scripts/motion_gen_eval/`](scripts/motion_gen_eval/). It is a
+fully optional add-on that is not loaded by `scripts/run_benchmarks.py`;
+install it with `pip install -e ".[motion-gen-eval]"`.
+
 ## Limitations
 
 - Some metrics (LPIPS, CLIP score, SSIM, CIEDE2000) need heavier extras (`.[svg-metrics]`, `.[lottie-metrics]`, `.[layout-metrics]`). The full `.[layout-metrics]` stack is enabled on Linux with Python < 3.12. Metrics whose dependencies are unavailable are omitted from the output (with a logged warning).
