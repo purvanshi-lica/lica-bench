@@ -1,9 +1,15 @@
 # Graphic-Design-Bench: A Comprehensive Benchmark for Evaluating AI on Graphic Design Tasks
 
+<div style='display:flex; gap: 0.25rem; '>
+<a href='https://huggingface.co/datasets/lica-world/GDB'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-GDBench-blue'></a>
+<a href='https://huggingface.co/datasets/lica-world/GDB-video'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-GDBench--Video-blue'></a>
+<a href='https://arxiv.org/pdf/2604.04192'><img src='https://img.shields.io/badge/Paper-PDF-red'></a>
+</div>
+
 **lica-bench** is a structured evaluation suite for measuring how well vision-language models understand, edit, and generate graphic design artifacts. [Paper link](https://arxiv.org/pdf/2604.04192) 
 It covers layout reasoning, typography, visual hierarchy, SVG/vector understanding, template variants, animation, and more.
 
-Benchmarks use the [Lica dataset](https://github.com/purvanshi/lica-dataset) (1,148 graphic design layouts). We release [design-benchmarks.zip](https://storage.googleapis.com/lica-assets/websites/blog/design-benchmarks.zip) containing all task-specific evaluation data organized under **benchmarks/<domain>/** (including manifests, JSON specifications, and prepared assets), along with model outputs for each task.
+Benchmarks use the [Lica dataset](https://github.com/purvanshi/lica-dataset) (1,148 graphic design layouts). We release [design-benchmarks.zip](https://storage.googleapis.com/lica-assets/websites/blog/design-benchmarks.zip) containing all task-specific evaluation data organized under **`benchmarks/<domain>/`** (including manifests, JSON specifications, and prepared assets), along with model outputs for each task.
 
 ## Benchmarks
 
