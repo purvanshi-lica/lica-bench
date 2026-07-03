@@ -1,8 +1,15 @@
-# lica-bench
+# Graphic-Design-Bench: A Comprehensive Benchmark for Evaluating AI on Graphic Design Tasks
 
-**lica-bench** is a structured evaluation suite for measuring how well vision-language models understand, edit, and generate graphic design artifacts. It covers layout reasoning, typography, visual hierarchy, SVG/vector understanding, template variants, animation, and more.
+<div style='display:flex; gap: 0.25rem; '>
+<a href='https://huggingface.co/datasets/lica-world/GDB'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-GDBench-blue'></a>
+<a href='https://huggingface.co/datasets/lica-world/GDB-video'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-GDBench--Video-blue'></a>
+<a href='https://arxiv.org/pdf/2604.04192'><img src='https://img.shields.io/badge/Paper-PDF-red'></a>
+</div>
 
-Benchmarks use the [Lica dataset](https://github.com/purvanshi/lica-dataset) (1,148 graphic design layouts). We release [design-benchmarks.zip](https://storage.googleapis.com/lica-assets/websites/blog/design-benchmarks.zip) containing all task-specific evaluation data organized under **benchmarks/<domain>/** (including manifests, JSON specifications, and prepared assets), along with model outputs for each task.
+**lica-bench** is a structured evaluation suite for measuring how well vision-language models understand, edit, and generate graphic design artifacts. [Paper link](https://arxiv.org/pdf/2604.04192) 
+It covers layout reasoning, typography, visual hierarchy, SVG/vector understanding, template variants, animation, and more.
+
+Benchmarks use the [Lica dataset](https://github.com/purvanshi/lica-dataset) (1,148 graphic design layouts). We release [design-benchmarks.zip](https://storage.googleapis.com/lica-assets/websites/blog/design-benchmarks.zip) containing all task-specific evaluation data organized under **`benchmarks/<domain>/`** (including manifests, JSON specifications, and prepared assets), along with model outputs for each task.
 
 ## Benchmarks
 
@@ -248,6 +255,16 @@ See **[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)** for:
 - How to add a benchmark task to an existing domain
 - How to create a new domain module
 - Where benchmark inputs live in the Lica release and the PR checklist
+
+## Motion-generation evaluation
+
+For tracker + motion-correctness evaluation of generated animation videos
+(motion type, direction, animation duration, component duration), see
+[`scripts/motion_gen_eval/README.md`](scripts/motion_gen_eval/README.md).
+The library lives in [`src/motion_gen_eval/`](src/motion_gen_eval/) and the
+runners in [`scripts/motion_gen_eval/`](scripts/motion_gen_eval/). It is a
+fully optional add-on that is not loaded by `scripts/run_benchmarks.py`;
+install it with `pip install -e ".[motion-gen-eval]"`.
 
 ## Limitations
 
